@@ -1,32 +1,21 @@
-from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
-import logging
+from fastapi import FastAPI, Query
 from datetime import datetime
+import aiofiles
+import os
 from src.services.email import send_mail_task
 
 app = FastAPI()
 
-# Configure logging
-# logging.basicConfig(filename='/var/log/messaging_system.log', level=logging.INFO)
-
-# Pydantic models
-class SendMailParams(BaseModel):
-    sendmail: str
-
 @app.get("/")
-def root():
-    return {"message": "Messaging system is running"}
+async def root(sendmail: str = Query(None), talktome: bool = Query(False)):
+    if sendmail:
+        send_mail_task.delay(sendmail)
+        return {"message": f"Email will be sent to {sendmail}"}
 
-@app.post("/sendmail")
-def send_mail(params: SendMailParams):
-    send_mail_task.delay(params.sendmail)
-    return {"message": f"Email task for {params.sendmail} has been queued"}
-
-@app.get("/talktome")
-def talk_to_me(talktome: bool = Query(False)):
     if talktome:
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        logging.info(f"Current time logged: {current_time}")
-        return {"message": f"Current time {current_time} logged successfully"}
-    else:
-        raise HTTPException(status_code=400, detail="Invalid parameter")
+        log_message = f"{datetime.now()}\n"
+        async with aiofiles.open("/var/log/messaging_system.log", mode="a") as log_file:
+            await log_file.write(log_message)
+        return {"message": "Current time logged"}
+
+    return {"message": "Invalid request"}
